@@ -1,7 +1,11 @@
 from dotenv import load_dotenv
 import os
+import json
+import base64
 import logging
 from datetime import datetime
+from threading import Thread
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -25,10 +29,18 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 ]
-SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_FILE")
-SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
 
-creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+# ← ZMIANA: obsługa credentials z ENV (dla Koyeb) lub z pliku (lokalnie)
+GOOGLE_CREDENTIALS_B64 = os.getenv("GOOGLE_CREDENTIALS_B64")
+if GOOGLE_CREDENTIALS_B64:
+    creds_json = json.loads(base64.b64decode(GOOGLE_CREDENTIALS_B64))
+    creds = Credentials.from_service_account_info(creds_json, scopes=SCOPES)
+else:
+    creds = Credentials.from_service_account_file(
+        os.getenv("GOOGLE_SERVICE_FILE"), scopes=SCOPES
+    )
+
+SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
 gc = gspread.authorize(creds)
 spreadsheet = gc.open_by_key(SPREADSHEET_ID)
 
@@ -254,9 +266,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     )
 
 
+# ====== Health check server (wymagany przez Koyeb) ======
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+
+    def log_message(self, format, *args):
+        pass
+
+
+def run_health_server():
+    port = int(os.getenv("PORT", 8000))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    server.serve_forever()
+
+
 # ====== main ======
 
 def main():
+    # ← ZMIANA: health check w tle
+    Thread(target=run_health_server, daemon=True).start()
+
     app = ApplicationBuilder().token(TOKEN).build()
 
     conv = ConversationHandler(
