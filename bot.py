@@ -46,6 +46,7 @@ spreadsheet = gc.open_by_key(SPREADSHEET_ID)
 
 # Stan konwersacji
 WAITING_CATEGORIES = 1
+WAITING_CATEGORY_ACTION = 2
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -142,6 +143,47 @@ def create_monthly_ws(month: str, categories: list) -> gspread.Worksheet:
     return ws
 
 
+def add_category_to_monthly_ws(new_category: str, all_categories: list):
+    """Dodaje nową kolumnę kategorii do istniejącej zakładki miesięcznej."""
+    month = current_month_label()
+    try:
+        ws = spreadsheet.worksheet(month)
+    except gspread.exceptions.WorksheetNotFound:
+        return  # zostanie utworzona z pełną listą przy następnym wpisie
+
+    num_cats = len(all_categories)       # już z nową kategorią
+    old_suma_col = num_cats + 1          # gdzie SUMA była przed zmianą
+    new_suma_col = num_cats + 2          # gdzie SUMA będzie po wstawieniu
+    new_cat_letter = col_letter(old_suma_col)
+
+    # Dane nowej kolumny (33 wiersze)
+    new_col = [new_category]             # wiersz 1: nagłówek
+    new_col += [""] * 31                 # wiersze 2-32: dni (puste)
+    new_col.append(                      # wiersz 33: suma kategorii
+        f"=SUM({new_cat_letter}2:{new_cat_letter}32)"
+    )
+
+    # Wstaw kolumnę w miejsce starej SUMY (SUMA przesuwa się w prawo)
+    ws.insert_cols([new_col], col=old_suma_col, value_input_option="USER_ENTERED")
+
+    # Zaktualizuj formuły SUMY (bo nie rozszerzają się automatycznie)
+    first_cat = col_letter(2)
+    last_cat = col_letter(num_cats + 1)
+    suma_letter = col_letter(new_suma_col)
+
+    suma_cells = []
+    for day in range(1, 32):
+        r = day + 1
+        suma_cells.append([f"=SUM({first_cat}{r}:{last_cat}{r})"])
+    suma_cells.append([f"=SUM({first_cat}33:{last_cat}33)"])
+
+    ws.update(
+        f"{suma_letter}2:{suma_letter}33",
+        suma_cells,
+        value_input_option="USER_ENTERED",
+    )
+    logger.info("Dodano kolumnę '%s' do zakładki %s", new_category, month)
+
 # ====== /start ======
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -192,9 +234,61 @@ async def receive_categories(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # ====== /kategorie ======
 
 async def change_categories(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Podaj nowe kategorie oddzielone przecinkami:")
-    return WAITING_CATEGORIES
+    categories = get_categories()
+    if categories:
+        await update.message.reply_text(
+            f"📂 Twoje kategorie:\n"
+            f"{', '.join(categories)}\n\n"
+            f"Aby dodać nową, napisz:\n"
+            f"dodaj nazwa\n\n"
+            f"Np: dodaj alkohol"
+        )
+        return WAITING_CATEGORY_ACTION
+    else:
+        await update.message.reply_text(
+            "Nie masz jeszcze kategorii.\n"
+            "Podaj je oddzielone przecinkami, np.:\n"
+            "kawa, jedzenie, transport"
+        )
+        return WAITING_CATEGORIES
+    
+async def handle_category_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = update.message.text.strip().lower()
 
+    if not text.startswith("dodaj "):
+        await update.message.reply_text(
+            "Napisz: dodaj nazwa\n"
+            "Np: dodaj alkohol"
+        )
+        return WAITING_CATEGORY_ACTION
+
+    new_category = text[6:].strip()
+
+    if not new_category:
+        await update.message.reply_text("Podaj nazwę kategorii, np: dodaj alkohol")
+        return WAITING_CATEGORY_ACTION
+
+    categories = get_categories()
+
+    if new_category in categories:
+        await update.message.reply_text(
+            f"❌ Kategoria '{new_category}' już istnieje!\n"
+            f"📂 Kategorie: {', '.join(categories)}"
+        )
+        return ConversationHandler.END
+
+    # Dodaj do listy kategorii
+    categories.append(new_category)
+    save_categories(categories)
+
+    # Dodaj kolumnę do bieżącego miesiąca
+    add_category_to_monthly_ws(new_category, categories)
+
+    await update.message.reply_text(
+        f"✅ Dodano kategorię: {new_category}\n"
+        f"📂 Kategorie: {', '.join(categories)}"
+    )
+    return ConversationHandler.END
 
 # ====== Obsługa wiadomości ======
 
@@ -300,6 +394,9 @@ def main():
         states={
             WAITING_CATEGORIES: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_categories)
+            ],
+            WAITING_CATEGORY_ACTION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_category_action)
             ],
         },
         fallbacks=[CommandHandler("start", start)],
