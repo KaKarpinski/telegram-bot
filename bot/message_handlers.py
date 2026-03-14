@@ -1,0 +1,175 @@
+from datetime import datetime
+from telegram import Update
+from telegram.ext import (
+    ContextTypes,
+    ConversationHandler,
+)
+
+from helpers import current_month_label, safe_float, fmt
+from spreadsheets import save_categories, get_categories, get_or_create_monthly_ws, add_category_to_monthly_ws
+
+WAITING_CATEGORIES = 1
+WAITING_CATEGORY_ACTION = 2
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    categories = get_categories()
+
+    if categories:
+        month = current_month_label()
+        get_or_create_monthly_ws(categories)
+        await update.message.reply_text(
+            f"Cześć! 👋\n"
+            f"📂 Kategorie: {', '.join(categories)}\n"
+            f"📅 Miesiąc: {month}\n\n"
+            f"• kawa 16 — dodaj wydatek\n"
+            f"• kawa ile — sprawdź sumę\n"
+            f"• /kategorie — zmień kategorie"
+        )
+        return ConversationHandler.END
+
+    await update.message.reply_text(
+        "Cześć! 👋\n"
+        "Podaj kategorie oddzielone przecinkami, np.:\n"
+        "kawa, jedzenie, transport"
+    )
+    return WAITING_CATEGORIES
+
+async def receive_categories(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    raw = update.message.text
+    categories = [c.strip().lower() for c in raw.split(",") if c.strip()]
+
+    if not categories:
+        await update.message.reply_text("Nie wykryłem kategorii — spróbuj ponownie.")
+        return WAITING_CATEGORIES
+
+    save_categories(categories)
+    get_or_create_monthly_ws(categories)
+
+    await update.message.reply_text(
+        f"✅ Kategorie: {', '.join(categories)}\n"
+        f"📅 Zakładka: {current_month_label()}\n\n"
+        f"Wyślij np.  kawa 16  lub  kawa ile"
+    )
+    return ConversationHandler.END
+
+async def change_categories(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    categories = get_categories()
+    if categories:
+        await update.message.reply_text(
+            f"📂 Twoje kategorie:\n"
+            f"{', '.join(categories)}\n\n"
+            f"Aby dodać nową, napisz:\n"
+            f"dodaj nazwa\n\n"
+            f"Np: dodaj alkohol"
+        )
+        return WAITING_CATEGORY_ACTION
+    else:
+        await update.message.reply_text(
+            "Nie masz jeszcze kategorii.\n"
+            "Podaj je oddzielone przecinkami, np.:\n"
+            "kawa, jedzenie, transport"
+        )
+        return WAITING_CATEGORIES
+    
+async def handle_category_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = update.message.text.strip().lower()
+
+    if not text.startswith("dodaj "):
+        await update.message.reply_text(
+            "Napisz: dodaj nazwa\n"
+            "Np: dodaj alkohol"
+        )
+        return WAITING_CATEGORY_ACTION
+
+    new_category = text[6:].strip()
+
+    if not new_category:
+        await update.message.reply_text("Podaj nazwę kategorii, np: dodaj alkohol")
+        return WAITING_CATEGORY_ACTION
+
+    categories = get_categories()
+
+    if new_category in categories:
+        await update.message.reply_text(
+            f"❌ Kategoria '{new_category}' już istnieje!\n"
+            f"📂 Kategorie: {', '.join(categories)}"
+        )
+        return ConversationHandler.END
+
+    categories.append(new_category)
+    save_categories(categories)
+
+    add_category_to_monthly_ws(new_category, categories)
+
+    await update.message.reply_text(
+        f"✅ Dodano kategorię: {new_category}\n"
+        f"📂 Kategorie: {', '.join(categories)}"
+    )
+    return ConversationHandler.END
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    text = update.message.text.strip().lower()
+    categories = get_categories()
+
+    if not categories:
+        await update.message.reply_text("Najpierw wpisz /start i podaj kategorie.")
+        return
+
+    month = current_month_label()
+    ws = get_or_create_monthly_ws(categories)
+
+    # ---------- "kawa ile" ----------
+    if text.endswith(" ile"):
+        category = text[:-4].strip()
+
+        if category not in categories:
+            await update.message.reply_text(
+                f"❌ Nieznana kategoria: '{category}'\n"
+                f"Dostępne: {', '.join(categories)}"
+            )
+            return
+
+        cat_col = categories.index(category) + 2
+        total = safe_float(ws.cell(33, cat_col).value)
+        await update.message.reply_text(f"📊 {category} w {month}: {fmt(total)} zł")
+        return
+
+    # ---------- "kawa 16" ----------
+    parts = text.split()
+    if len(parts) == 2:
+        category, amount_str = parts
+
+        if category not in categories:
+            await update.message.reply_text(
+                f"❌ Nieznana kategoria: '{category}'\n"
+                f"Dostępne: {', '.join(categories)}"
+            )
+            return
+
+        try:
+            amount = float(amount_str.replace(",", "."))
+        except ValueError:
+            await update.message.reply_text("Kwota musi być liczbą, np. kawa 16")
+            return
+
+        day = datetime.today().day
+        row = day + 1
+        cat_col = categories.index(category) + 2
+
+        current = safe_float(ws.cell(row, cat_col).value)
+        ws.update_cell(row, cat_col, current + amount)
+
+        total = safe_float(ws.cell(33, cat_col).value)
+
+        await update.message.reply_text(
+            f"✅ +{fmt(amount)} zł → {category}\n"
+            f"📊 Suma {category} w {month}: {fmt(total)} zł"
+        )
+        return
+
+    await update.message.reply_text(
+        "🤔 Nie rozumiem. Użyj:\n"
+        "• kawa 16 — dodaj wydatek\n"
+        "• kawa ile — sprawdź sumę"
+    )
+
