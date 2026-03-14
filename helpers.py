@@ -1,5 +1,10 @@
 from datetime import datetime
 
+CANCEL_HINT = "\n\n💡 Jeśli chcesz wyjść, napisz 'anuluj'"
+
+def with_hint(message: str) -> str:
+    return message + CANCEL_HINT
+
 def col_letter(n: int) -> str:
     result = ""
     while n > 0:

@@ -11,7 +11,9 @@ def get_categories() -> list:
         return [v.strip().lower() for v in values if v.strip()]
     except gspread.exceptions.WorksheetNotFound:
         return []
-
+    
+def get_spreadsheet_names() -> list:
+    return spreadsheet.worksheets()
 
 def save_categories(categories: list):
     try:
@@ -27,7 +29,13 @@ def get_or_create_monthly_ws(categories: list) -> gspread.Worksheet:
         return spreadsheet.worksheet(month)
     except gspread.exceptions.WorksheetNotFound:
         return create_monthly_ws(month, categories)
-
+    
+def get_monthly_ws(month: str) -> gspread.Worksheet:
+    try:
+        return spreadsheet.worksheet(month)
+    except gspread.exceptions.WorksheetNotFound:
+        return None
+    
 
 def create_monthly_ws(month: str, categories: list) -> gspread.Worksheet:
     num_cats = len(categories)
@@ -56,7 +64,6 @@ def create_monthly_ws(month: str, categories: list) -> gspread.Worksheet:
     ws.update("A1", all_rows, value_input_option="USER_ENTERED")
     logger.info("Utworzono zakładkę: %s", month)
     return ws
-
 
 def add_category_to_monthly_ws(new_category: str, all_categories: list):
     month = current_month_label()
@@ -95,3 +102,18 @@ def add_category_to_monthly_ws(new_category: str, all_categories: list):
     )
     logger.info("Dodano kolumnę '%s' do zakładki %s", new_category, month)
 
+def get_month_sum(ws: gspread.Worksheet):
+    last_col = ws.row_values(1)
+    last_row = len(ws.col_values(1))
+    
+    return ws.cell(last_row, len(last_col)).value
+
+def get_category_sum(ws: gspread.Worksheet, category: str):
+    headers = ws.row_values(1)
+    
+    try:
+        col_index = headers.index(category) + 1
+        col_values = ws.col_values(col_index)
+        return col_values[-1]
+    except ValueError:
+        return None

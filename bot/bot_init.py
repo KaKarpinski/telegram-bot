@@ -8,13 +8,13 @@ from telegram.ext import (
     filters,
 )
 
-from .message_handlers import receive_categories, handle_category_action, handle_message, start, change_categories
+from .message_handlers import receive_categories, handle_category_action, handle_message, start, change_categories, get_requested_sum_handler, handle_sum_action, cancel
 from logger import logger
-
-WAITING_CATEGORIES = 1
-WAITING_CATEGORY_ACTION = 2
+from consts import WAITING_CATEGORIES, WAITING_CATEGORY_ACTION, WAITING_SUM_ACTION
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
+
+CANCEL_FILTER = filters.Regex("(?i)^anuluj$")
 
 def initialize_bot():
     app = ApplicationBuilder().token(TOKEN).build()
@@ -23,16 +23,23 @@ def initialize_bot():
         entry_points=[
             CommandHandler("start", start),
             CommandHandler("kategorie", change_categories),
+            CommandHandler("suma", get_requested_sum_handler)
         ],
         states={
             WAITING_CATEGORIES: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_categories)
+                MessageHandler(filters.TEXT & ~filters.COMMAND & ~CANCEL_FILTER, receive_categories)
             ],
             WAITING_CATEGORY_ACTION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_category_action)
+                MessageHandler(filters.TEXT & ~filters.COMMAND & ~CANCEL_FILTER, handle_category_action)
             ],
+            WAITING_SUM_ACTION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND & ~CANCEL_FILTER, handle_sum_action)
+            ]
         },
-        fallbacks=[CommandHandler("start", start)],
+        fallbacks=[
+            CommandHandler("anuluj", cancel),                              
+            MessageHandler(CANCEL_FILTER, cancel),
+        ],
     )
 
     app.add_handler(conv)

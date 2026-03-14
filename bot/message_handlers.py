@@ -5,11 +5,9 @@ from telegram.ext import (
     ConversationHandler,
 )
 
-from helpers import current_month_label, safe_float, fmt
-from spreadsheets import save_categories, get_categories, get_or_create_monthly_ws, add_category_to_monthly_ws
-
-WAITING_CATEGORIES = 1
-WAITING_CATEGORY_ACTION = 2
+from helpers import current_month_label, safe_float, fmt, with_hint
+from spreadsheets import save_categories, get_categories, get_or_create_monthly_ws, add_category_to_monthly_ws, get_spreadsheet_names, get_monthly_ws, get_category_sum, get_month_sum
+from consts import WAITING_CATEGORIES, WAITING_CATEGORY_ACTION, WAITING_SUM_ACTION
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     categories = get_categories()
@@ -24,14 +22,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             f"• kawa 16 — dodaj wydatek\n"
             f"• kawa ile — sprawdź sumę\n"
             f"• /kategorie — zmień kategorie"
+            f"• /suma — sprawdź sumy według miesięcy"
         )
         return ConversationHandler.END
 
-    await update.message.reply_text(
+    await update.message.reply_text(with_hint(
         "Cześć! 👋\n"
         "Podaj kategorie oddzielone przecinkami, np.:\n"
         "kawa, jedzenie, transport"
-    )
+    ))
     return WAITING_CATEGORIES
 
 async def receive_categories(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -64,12 +63,59 @@ async def change_categories(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
         return WAITING_CATEGORY_ACTION
     else:
-        await update.message.reply_text(
+        await update.message.reply_text(with_hint(
             "Nie masz jeszcze kategorii.\n"
             "Podaj je oddzielone przecinkami, np.:\n"
             "kawa, jedzenie, transport"
-        )
+        ))
         return WAITING_CATEGORIES
+    
+async def get_requested_sum_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    wss = get_spreadsheet_names()
+
+    if len(wss) <= 1:
+        await update.message.reply_text("Nie masz jeszcze czego sumować")
+        return
+    else:
+        await update.message.reply_text(with_hint(
+            "Suma całego miesiąca: napisz np. 2026-03\n"
+            "Suma kategorii w ramach danego miesiąca: napisz np. 2026-03 kawa"
+        ))
+        return WAITING_SUM_ACTION
+    
+async def handle_sum_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = update.message.text.strip().lower()
+    parts = text.split(" ")
+    month = parts[0]
+    ws = get_monthly_ws(month)
+
+    if not ws:
+        await update.message.reply_text(
+            f"❌ Nie znaleziono arkusza dla miesiąca: {month}"
+        )
+        return WAITING_SUM_ACTION
+    
+    if len(parts) == 1:
+        total = get_month_sum(ws)
+        await update.message.reply_text(
+            f"📊 Suma wszystkich wydatków w {month}: {total}"
+        )
+        return ConversationHandler.END
+    
+    category = parts[1]
+    total = get_category_sum(ws, category)
+
+    if not total:
+        await update.message.reply_text(
+            f"❌ Nie znaleziono kategorii w miesiącu {month}"
+        )
+        return WAITING_SUM_ACTION
+
+    await update.message.reply_text(
+        f"📊 Suma '{category}' w {month}: {total}"
+    )
+    return ConversationHandler.END
+    
     
 async def handle_category_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.message.text.strip().lower()
@@ -173,3 +219,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         "• kawa ile — sprawdź sumę"
     )
 
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Anulowano. Możesz wpisać nową komendę.")
+    return ConversationHandler.END
