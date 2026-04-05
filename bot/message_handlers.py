@@ -141,26 +141,6 @@ async def handle_subscription_action(update: Update, context: ContextTypes.DEFAU
         f"{', '.join(formatted_subs)}"
     )
     return ConversationHandler.END
-    # subs = get_subscriptions()
-    # parts = new_sub.split(" ")
-    # new_sub_name = parts[0]
-    # new_sub_cost = parts[1]
-
-    # if new_sub_name in subs:
-    #     update_subscription(new_sub_name, new_sub_cost)
-    #     await update.message.reply_text(
-    #         f"✅ Zaktualizowano subskrypcję: {new_sub_name}\n"
-    #     )
-    #     return ConversationHandler.END
-
-    # save_subscription(new_sub_name, new_sub_cost)
-
-    # await update.message.reply_text(
-    #     f"✅ Dodano subskrypcję: {new_sub_name}\n"
-    #     f"📂 Subskrypcje: {', '.join(subs)}"
-    # )
-    # return ConversationHandler.END
-
     
 async def get_requested_sum_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     wss = get_spreadsheet_names()
