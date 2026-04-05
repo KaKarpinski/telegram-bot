@@ -6,7 +6,7 @@ from telegram.ext import (
 )
 
 from helpers import current_month_label, safe_float, fmt, with_hint
-from spreadsheets import save_categories, get_categories, get_or_create_monthly_ws, add_category_to_monthly_ws, get_spreadsheet_names, get_monthly_ws, get_category_sum, get_month_sum, get_subscriptions, save_subscription, update_subscription, get_subscriptions_sum
+from spreadsheets import get_categories_sum, save_categories, get_categories, get_or_create_monthly_ws, add_category_to_monthly_ws, get_spreadsheet_names, get_monthly_ws, get_category_sum, get_month_sum, get_subscriptions, save_subscription, update_subscription, get_subscriptions_sum
 from consts import WAITING_CATEGORIES, WAITING_CATEGORY_ACTION, WAITING_SUM_ACTION, WAITING_SUB_ACTION
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -141,7 +141,7 @@ async def handle_subscription_action(update: Update, context: ContextTypes.DEFAU
         f"{', '.join(formatted_subs)}"
     )
     return ConversationHandler.END
-    
+
 async def get_requested_sum_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     wss = get_spreadsheet_names()
 
@@ -169,9 +169,11 @@ async def handle_sum_action(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     if len(parts) == 1:
         total = get_month_sum(ws)
+        categories_sum = get_categories_sum(ws)
         subs_sum = get_subscriptions_sum()
         await update.message.reply_text(
             f"📊 Suma wszystkich wydatków w {month}: {total}\n"
+            f"📊 {categories_sum}\n"
             f"➕ w tym subskrypcje: {subs_sum}"
         )
         return ConversationHandler.END

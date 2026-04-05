@@ -179,6 +179,23 @@ def get_month_sum(ws: gspread.Worksheet):
     
     return ws.cell(last_row, len(last_col)).value
 
+def get_categories_sum(ws: gspread.Worksheet):
+    headers = ws.row_values(1)
+    last_row = len(ws.col_values(1))
+    sums_row = ws.row_values(last_row)
+
+    categories = headers[1:-1]
+    sums = sums_row[1:-1]
+
+    result = []
+    for i in range(len(categories)):
+        name = categories[i].strip()
+        cost = sums[i].strip() if i < len(sums) else "0"
+        if name and cost:
+            result.append(f"{name} {cost}")
+
+    return ", ".join(result)
+
 def get_category_sum(ws: gspread.Worksheet, category: str):
     headers = ws.row_values(1)
     
