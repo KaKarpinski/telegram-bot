@@ -6,8 +6,8 @@ from telegram.ext import (
 )
 
 from helpers import current_month_label, safe_float, fmt, with_hint
-from spreadsheets import save_categories, get_categories, get_or_create_monthly_ws, add_category_to_monthly_ws, get_spreadsheet_names, get_monthly_ws, get_category_sum, get_month_sum
-from consts import WAITING_CATEGORIES, WAITING_CATEGORY_ACTION, WAITING_SUM_ACTION
+from spreadsheets import save_categories, get_categories, get_or_create_monthly_ws, add_category_to_monthly_ws, get_spreadsheet_names, get_monthly_ws, get_category_sum, get_month_sum, get_subscriptions, save_subscription, update_subscription, get_subscriptions_sum
+from consts import WAITING_CATEGORIES, WAITING_CATEGORY_ACTION, WAITING_SUM_ACTION, WAITING_SUB_ACTION
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     categories = get_categories()
@@ -69,6 +69,98 @@ async def change_categories(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             "kawa, jedzenie, transport"
         ))
         return WAITING_CATEGORIES
+
+async def handle_subscriptions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    subs = get_subscriptions()
+    if subs:
+        formatted = [f"{name} {cost}" for name, cost in subs]
+        await update.message.reply_text(
+            f"📂 Twoje subskrypcje:\n"
+            f"{', '.join(formatted)}\n\n"
+            f"Aby dodać nową lub zaktualizować istniejącą, napisz:\n"
+            f"dodaj [nazwa] [kwota]\n\n"
+            f"Np: dodaj spotify 30"
+        )
+        return WAITING_SUB_ACTION
+    else:
+        await update.message.reply_text(with_hint(
+            "Nie masz jeszcze subskrypcji.\n"
+            f"Aby dodać nową, napisz:\n"
+            f"dodaj [nazwa] [kwota]\n\n"
+            f"Np: dodaj spotify 30"
+        ))
+        return WAITING_SUB_ACTION
+
+async def handle_subscription_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = update.message.text.strip().lower()
+
+    if not text.startswith("dodaj "):
+        await update.message.reply_text(
+            "Napisz: dodaj [nazwa] [kwota]\n"
+            "Np: dodaj spotify 30"
+        )
+        return WAITING_SUB_ACTION
+
+    new_sub = text[6:].strip()
+
+    if not new_sub:
+        await update.message.reply_text("Podaj nazwę subskrypcji i kwotę, np: dodaj spotify 30")
+        return WAITING_SUB_ACTION
+
+    subs_list = get_subscriptions()
+    subs_names = [name for name, cost in subs_list]
+
+    parts = new_sub.split(" ")
+    if len(parts) < 2:
+        await update.message.reply_text("❌ Błąd: wpisz nazwę i kwotę, np. spotify 30")
+        return ConversationHandler.END
+
+    new_sub_name = parts[0].strip().lower()
+
+    try:
+        new_sub_cost = int(parts[1].strip())
+    except ValueError:
+        await update.message.reply_text("❌ Kwota musi być liczbą całkowitą.")
+        return ConversationHandler.END
+
+    if new_sub_name in subs_names:
+        update_subscription(new_sub_name, new_sub_cost)
+        await update.message.reply_text(
+            f"✅ Zaktualizowano subskrypcję: {new_sub_name} → {new_sub_cost} PLN"
+        )
+    else:
+        save_subscription(new_sub_name, new_sub_cost)
+        subs_list.append((new_sub_name, new_sub_cost))
+        f"✅ Dodano subskrypcję: {new_sub_name} {new_sub_cost} PLN"
+
+    updated_subs_list = get_subscriptions()
+    formatted_subs = [f"{name} {cost}" for name, cost in updated_subs_list]
+
+    await update.message.reply_text(
+        f"📂 Twoje subskrypcje:\n"
+        f"{', '.join(formatted_subs)}"
+    )
+    return ConversationHandler.END
+    # subs = get_subscriptions()
+    # parts = new_sub.split(" ")
+    # new_sub_name = parts[0]
+    # new_sub_cost = parts[1]
+
+    # if new_sub_name in subs:
+    #     update_subscription(new_sub_name, new_sub_cost)
+    #     await update.message.reply_text(
+    #         f"✅ Zaktualizowano subskrypcję: {new_sub_name}\n"
+    #     )
+    #     return ConversationHandler.END
+
+    # save_subscription(new_sub_name, new_sub_cost)
+
+    # await update.message.reply_text(
+    #     f"✅ Dodano subskrypcję: {new_sub_name}\n"
+    #     f"📂 Subskrypcje: {', '.join(subs)}"
+    # )
+    # return ConversationHandler.END
+
     
 async def get_requested_sum_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     wss = get_spreadsheet_names()
@@ -97,8 +189,10 @@ async def handle_sum_action(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     if len(parts) == 1:
         total = get_month_sum(ws)
+        subs_sum = get_subscriptions_sum()
         await update.message.reply_text(
-            f"📊 Suma wszystkich wydatków w {month}: {total}"
+            f"📊 Suma wszystkich wydatków w {month}: {total}\n"
+            f"➕ w tym subskrypcje: {subs_sum}"
         )
         return ConversationHandler.END
     

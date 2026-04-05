@@ -8,9 +8,9 @@ from telegram.ext import (
     filters,
 )
 
-from .message_handlers import receive_categories, handle_category_action, handle_message, start, change_categories, get_requested_sum_handler, handle_sum_action, cancel
+from .message_handlers import receive_categories, handle_category_action, handle_message, start, change_categories, get_requested_sum_handler, handle_sum_action, cancel, handle_subscriptions, handle_subscription_action
 from logger import logger
-from consts import WAITING_CATEGORIES, WAITING_CATEGORY_ACTION, WAITING_SUM_ACTION
+from consts import WAITING_CATEGORIES, WAITING_CATEGORY_ACTION, WAITING_SUM_ACTION,  WAITING_SUB_ACTION
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
@@ -23,7 +23,8 @@ def initialize_bot():
         entry_points=[
             CommandHandler("start", start),
             CommandHandler("kategorie", change_categories),
-            CommandHandler("suma", get_requested_sum_handler)
+            CommandHandler("suma", get_requested_sum_handler),
+            CommandHandler("subskrypcje", handle_subscriptions)
         ],
         states={
             WAITING_CATEGORIES: [
@@ -34,6 +35,9 @@ def initialize_bot():
             ],
             WAITING_SUM_ACTION: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND & ~CANCEL_FILTER, handle_sum_action)
+            ],
+            WAITING_SUB_ACTION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND & ~CANCEL_FILTER, handle_subscription_action)
             ]
         },
         fallbacks=[

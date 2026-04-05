@@ -12,6 +12,57 @@ def get_categories() -> list:
     except gspread.exceptions.WorksheetNotFound:
         return []
     
+def get_subscriptions_sum() -> int:
+    try:
+        ws = spreadsheet.worksheet("Subskrypcje")
+        cost_values = ws.col_values(2)  # Tylko kolumna B (kwoty)
+
+        total = 0
+        for value in cost_values:
+            value = value.strip()
+            if not value:
+                continue  # Puste – pomijamy (i kończymy logicznie, bo dane są ciągłe)
+            try:
+                amount = int(value)
+                total += amount
+            except ValueError:
+                continue  # Pomija nie-liczby
+        return total
+    except gspread.exceptions.WorksheetNotFound:
+        return 0
+
+def get_subscriptions() -> list[tuple[str, int]]:
+    try:
+        ws = spreadsheet.worksheet("Subskrypcje")
+        names_col = ws.col_values(1)
+        costs_col = ws.col_values(2)
+
+        subscriptions = []
+
+        for i in range(len(names_col)):
+            name = names_col[i].strip()
+            if not name:
+                continue
+
+            if i >= len(costs_col):
+                continue
+
+            cost_str = costs_col[i].strip()
+            if not cost_str:
+                continue
+
+            try:
+                cost = int(cost_str)
+            except ValueError:
+                continue
+
+            subscriptions.append((name.lower(), cost))
+
+        return subscriptions
+
+    except gspread.exceptions.WorksheetNotFound:
+        return []
+    
 def get_spreadsheet_names() -> list:
     return spreadsheet.worksheets()
 
@@ -22,6 +73,26 @@ def save_categories(categories: list):
     except gspread.exceptions.WorksheetNotFound:
         ws = spreadsheet.add_worksheet(title="Kategorie", rows=100, cols=1)
     ws.update("A1", [[cat] for cat in categories])
+
+def save_subscription(sub_name: str, sub_cost: int):
+    try:
+        ws = spreadsheet.worksheet("Subskrypcje")
+    except gspread.exceptions.WorksheetNotFound:
+        ws = spreadsheet.add_worksheet(title="Subskrypcje", rows=100, cols=2)
+    col_a = ws.col_values(1)
+    next_row = len(col_a) + 1 
+    ws.update(f"A{next_row}:B{next_row}", [[sub_name, sub_cost]])
+
+def update_subscription(sub_name: str, sub_cost: int):
+    ws = spreadsheet.worksheet("Subskrypcje")
+    names = ws.col_values(1)
+
+    for i, name in enumerate(names):
+        if name.strip().lower() == sub_name.strip().lower():
+            row_index = i + 1
+            ws.update(f"B{row_index}", [[sub_cost]])
+            return True
+    return False
 
 def get_or_create_monthly_ws(categories: list) -> gspread.Worksheet:
     month = current_month_label()
