@@ -172,7 +172,7 @@ async def handle_sum_action(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         categories_sum = get_categories_sum(ws)
         subs_sum = get_subscriptions_sum()
         await update.message.reply_text(
-            f"📊 Suma wszystkich wydatków w {month}: {total}\n"
+            f"📊 Suma wszystkich wydatków w {month}: {int(total) + subs_sum}\n"
             f"📊 {categories_sum}\n"
             f"➕ w tym subskrypcje: {subs_sum}"
         )
