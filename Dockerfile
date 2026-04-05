@@ -11,7 +11,6 @@ COPY gs_init.py .
 COPY helpers.py .
 COPY logger.py .
 COPY spreadsheets.py .
-COPY service_account.json .
 
 COPY bot/ ./bot/
 
