@@ -9,6 +9,8 @@ from telegram.ext import (
     filters,
 )
 
+from telegram import BotCommand
+
 from .message_handlers import receive_categories, handle_category_action, handle_message, start, change_categories, get_requested_sum_handler, handle_sum_action, cancel, handle_subscriptions, handle_subscription_action
 from logger import logger
 from consts import WAITING_CATEGORIES, WAITING_CATEGORY_ACTION, WAITING_SUM_ACTION,  WAITING_SUB_ACTION
@@ -17,8 +19,17 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 CANCEL_FILTER = filters.Regex("(?i)^anuluj$")
 
+async def post_init(app):
+    await app.bot.set_my_commands([
+        BotCommand("start", "Uruchom bota"),
+        BotCommand("kategorie", "Zarządzaj kategoriami"),
+        BotCommand("subskrypcje", "Zarządzaj subskrypcjami"),
+        BotCommand("suma", "Podsumowanie wydatków"),
+        BotCommand("anuluj", "Anuluj bieżącą operację"),
+    ])
+
 def initialize_bot():
-    app = ApplicationBuilder().token(TOKEN).build()
+    app = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
 
     conv = ConversationHandler(
         entry_points=[
