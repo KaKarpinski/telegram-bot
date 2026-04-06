@@ -1,4 +1,5 @@
 from datetime import datetime
+from bot.keyboards import with_buttons
 from telegram import Update
 from telegram.ext import (
     ContextTypes,
@@ -143,55 +144,44 @@ async def handle_subscription_action(update: Update, context: ContextTypes.DEFAU
     return ConversationHandler.END
 
 async def get_requested_sum_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    wss = get_spreadsheet_names()
+    months = get_spreadsheet_names()
 
-    if len(wss) <= 1:
+    if len(months) <= 1:
         await update.message.reply_text("Nie masz jeszcze czego sumować")
         return
     else:
-        await update.message.reply_text(with_hint(
-            "Suma całego miesiąca: napisz np. 2026-03\n"
-            "Suma kategorii w ramach danego miesiąca: napisz np. 2026-03 kawa"
-        ))
+        await update.message.reply_text(
+            "📅 Wybierz miesiąc, z którego mam policzyć sumę:",
+            reply_markup=with_buttons(months, columns=3)
+        )
         return WAITING_SUM_ACTION
     
 async def handle_sum_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = update.message.text.strip().lower()
-    parts = text.split(" ")
-    month = parts[0]
+    query = update.callback_query
+    await query.answer()
+
+    month = query.data.strip().lower()
+
+    await query.edit_message_text("⏳ Obliczam sumę...")
+    
     ws = get_monthly_ws(month)
 
     if not ws:
-        await update.message.reply_text(
+        await query.edit_message_text(
             f"❌ Nie znaleziono arkusza dla miesiąca: {month}"
         )
-        return WAITING_SUM_ACTION
-    
-    if len(parts) == 1:
-        total = get_month_sum(ws)
-        categories_sum = get_categories_sum(ws)
-        subs_sum = get_subscriptions_sum()
-        await update.message.reply_text(
-            f"📊 Suma wszystkich wydatków w {month}: {int(total) + subs_sum}\n"
-            f"📊 {categories_sum}\n"
-            f"➕ w tym subskrypcje: {subs_sum}"
-        )
         return ConversationHandler.END
-    
-    category = parts[1]
-    total = get_category_sum(ws, category)
 
-    if not total:
-        await update.message.reply_text(
-            f"❌ Nie znaleziono kategorii w miesiącu {month}"
-        )
-        return WAITING_SUM_ACTION
+    total = get_month_sum(ws)
+    categories_sum = get_categories_sum(ws)
+    subs_sum = get_subscriptions_sum()
 
-    await update.message.reply_text(
-        f"📊 Suma '{category}' w {month}: {total}"
+    await query.edit_message_text(
+        f"📊 Suma wszystkich wydatków w {month}: {int(total) + subs_sum}\n"
+        f"📊 {categories_sum}\n"
+        f"➕ w tym subskrypcje: {subs_sum}"
     )
-    return ConversationHandler.END
-    
+    return ConversationHandler.END    
     
 async def handle_category_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.message.text.strip().lower()

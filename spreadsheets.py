@@ -63,8 +63,13 @@ def get_subscriptions() -> list[tuple[str, int]]:
     except gspread.exceptions.WorksheetNotFound:
         return []
     
-def get_spreadsheet_names() -> list:
-    return spreadsheet.worksheets()
+def get_spreadsheet_names() -> list[str]:
+    EXCLUDED_SHEETS = ["Subskrypcje", "Kategorie"]
+    all_sheets = spreadsheet.worksheets()
+    return [
+        ws.title for ws in all_sheets 
+        if ws.title not in EXCLUDED_SHEETS
+    ]
 
 def save_categories(categories: list):
     try:

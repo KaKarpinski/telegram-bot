@@ -4,6 +4,7 @@ from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
+    CallbackQueryHandler,
     ConversationHandler,
     filters,
 )
@@ -34,7 +35,7 @@ def initialize_bot():
                 MessageHandler(filters.TEXT & ~filters.COMMAND & ~CANCEL_FILTER, handle_category_action)
             ],
             WAITING_SUM_ACTION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND & ~CANCEL_FILTER, handle_sum_action)
+                CallbackQueryHandler(handle_sum_action)
             ],
             WAITING_SUB_ACTION: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND & ~CANCEL_FILTER, handle_subscription_action)
