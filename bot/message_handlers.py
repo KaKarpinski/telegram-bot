@@ -75,13 +75,13 @@ async def handle_subscriptions(update: Update, context: ContextTypes.DEFAULT_TYP
     subs = get_subscriptions()
     if subs:
         formatted = [f"{name} {cost}" for name, cost in subs]
-        await update.message.reply_text(
+        await update.message.reply_text(with_hint(
             f"📂 Twoje subskrypcje:\n"
             f"{', '.join(formatted)}\n\n"
             f"Aby dodać nową lub zaktualizować istniejącą, napisz:\n"
             f"dodaj [nazwa] [kwota]\n\n"
             f"Np: dodaj spotify 30"
-        )
+        ))
         return WAITING_SUB_ACTION
     else:
         await update.message.reply_text(with_hint(
@@ -151,7 +151,7 @@ async def get_requested_sum_handler(update: Update, context: ContextTypes.DEFAUL
         return
     else:
         await update.message.reply_text(
-            "📅 Wybierz miesiąc, z którego mam policzyć sumę:",
+            with_hint("📅 Wybierz miesiąc, z którego mam policzyć sumę:"),
             reply_markup=with_buttons(months, columns=3)
         )
         return WAITING_SUM_ACTION
@@ -162,12 +162,12 @@ async def handle_sum_action(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     month = query.data.strip().lower()
 
-    await query.edit_message_text("⏳ Obliczam sumę...")
-    
+    loading_msg = await query.message.reply_text("⏳ Obliczam sumę...")
+
     ws = get_monthly_ws(month)
 
     if not ws:
-        await query.edit_message_text(
+        await loading_msg.edit_text(
             f"❌ Nie znaleziono arkusza dla miesiąca: {month}"
         )
         return ConversationHandler.END
@@ -176,12 +176,18 @@ async def handle_sum_action(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     categories_sum = get_categories_sum(ws)
     subs_sum = get_subscriptions_sum()
 
-    await query.edit_message_text(
+    await loading_msg.edit_text(
         f"📊 Suma wszystkich wydatków w {month}: {int(total) + subs_sum}\n"
         f"📊 {categories_sum}\n"
         f"➕ w tym subskrypcje: {subs_sum}"
     )
-    return ConversationHandler.END    
+
+    months = get_spreadsheet_names()
+    await query.message.reply_text(
+        "📅 Wybierz kolejny miesiąc lub wpisz /anuluj:",
+        reply_markup=with_buttons(months, columns=3)
+    )
+    return WAITING_SUM_ACTION  
     
 async def handle_category_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.message.text.strip().lower()
