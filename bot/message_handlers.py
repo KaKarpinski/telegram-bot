@@ -55,13 +55,13 @@ async def receive_categories(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def change_categories(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     categories = get_categories()
     if categories:
-        await update.message.reply_text(
+        await update.message.reply_text(with_hint(
             f"📂 Twoje kategorie:\n"
             f"{', '.join(categories)}\n\n"
             f"Aby dodać nową, napisz:\n"
             f"dodaj nazwa\n\n"
             f"Np: dodaj alkohol"
-        )
+        ))
         return WAITING_CATEGORY_ACTION
     else:
         await update.message.reply_text(with_hint(
